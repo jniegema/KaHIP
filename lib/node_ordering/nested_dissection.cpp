@@ -17,6 +17,63 @@
 #include "tools/graph_extractor.h"
 #include "tools/macros_assertions.h"
 #include "tools/quality_metrics.h"
+#include "tools/random_functions.h"
+#include "tools/thread_budget.h"
+
+#include <cstdlib>
+#include <limits>
+#include <mutex>
+#include <thread>
+
+#ifdef USEMETIS
+#include "metis.h"
+#endif
+
+namespace {
+// METIS draws from GKlib's generator, which is the C library's rand() unless
+// GKlib was built with GKRAND (then a Mersenne twister in static variables):
+// process-wide state either way with glibc, and every METIS call reseeds it on
+// entry. Two calls on two threads would interleave their draws and the
+// ordering would depend on scheduling, so METIS calls take turns: in sequence,
+// each call's draws are its own whichever thread runs it, and when. (Under
+// --threads, random_functions::setSeed leaves srand() to METIS for the same
+// reason.)
+#ifdef USEMETIS
+std::mutex metis_mutex;
+#endif
+
+// The subgraph's elimination order by METIS_NodeND, into labels (label[v]:
+// v's position). METIS's seed comes from KaHIP's generator, so a KaHIP seed
+// fixes the whole ordering and different seeds give different ones.
+void metis_ordering(graph_access &G, int nseps, std::vector<NodeID> &labels) {
+#ifdef USEMETIS
+        idx_t n = G.number_of_nodes();
+        std::vector<idx_t> xadj(n + 1), adjncy(G.number_of_edges()), vwgt(n), perm(n), iperm(n);
+        forall_nodes(G, node) {
+                xadj[node] = G.get_first_edge(node);
+                vwgt[node] = G.getNodeWeight(node);
+        } endfor
+        xadj[n] = G.number_of_edges();
+        forall_edges(G, e) {
+                adjncy[e] = G.getEdgeTarget(e);
+        } endfor
+        idx_t options[METIS_NOPTIONS];
+        METIS_SetDefaultOptions(options);
+        options[METIS_OPTION_NSEPS] = nseps;
+        options[METIS_OPTION_SEED]  = random_functions::nextInt(0, 1 << 30);
+        std::lock_guard<std::mutex> lock(metis_mutex);
+        if (METIS_NodeND(&n, xadj.data(), adjncy.data(), vwgt.data(), options, perm.data(), iperm.data()) != METIS_OK) {
+                std::cerr << "METIS_NodeND failed on a subgraph of " << n << " vertices" << std::endl;
+                std::exit(1);
+        }
+        labels.assign(iperm.begin(), iperm.end());
+#else
+        (void)G; (void)nseps; (void)labels;
+        std::cerr << "metis_below needs node_ordering built with METIS" << std::endl;
+        std::exit(1);
+#endif
+}
+}
 
 nested_dissection::nested_dissection(graph_access * const G) :
         original_graph(G), m_recursion_level(0) {}
@@ -26,6 +83,9 @@ nested_dissection::nested_dissection(graph_access * const G, int recursion_level
 
 
 void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
+        if (m_recursion_level == 0 && config.threads > 0) {
+                random_functions::use_thread_streams();
+        }
         if (original_graph->number_of_nodes() == 0) {
                 return;
         }
@@ -47,6 +107,13 @@ void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
                 if (active_graph->number_of_nodes() < config.dissection_rec_limit) {
                         // Stop nested dissection and use the min degree algorithm instead
                         MinDegree(active_graph).perform_ordering(m_reduced_label);
+                } else if (active_graph->number_of_nodes() < config.metis_below
+                           || (config.metis_depth >= 0 && m_recursion_level >= config.metis_depth)) {
+                        metis_ordering(*active_graph, config.metis_nseps, m_reduced_label);
+                } else if (config.threads > 0) {
+                        if (m_recursion_level == 0) thread_budget::set(config.threads);
+                        compute_separator(config, *active_graph);
+                        dissect_children(config, *active_graph);
                 } else {
                         NodeID order_begin = 0;
                         // continue nested dissection
@@ -88,6 +155,48 @@ void nested_dissection::compute_separator(PartitionConfig &config, graph_access 
 
         graph_partitioner partitioner;
         partitioner.perform_partitioning(config, G);
+}
+
+void nested_dissection::dissect_children(const PartitionConfig &config, graph_access &G) {
+        // The blocks in KaHIP's order, the parts and then the separator, each
+        // with its first position and a seed drawn here in that order: every
+        // task is then independent of which thread runs it, and when.
+        std::vector<PartitionID> blocks;
+        forall_blocks(G, p) {
+                if (p != G.getSeparatorBlock()) blocks.push_back(p);
+        } endfor
+        blocks.push_back(G.getSeparatorBlock());
+        std::vector<NodeID> size(G.get_partition_count(), 0);
+        forall_nodes(G, node) {
+                size[G.getPartitionIndex(node)]++;
+        } endfor
+        std::vector<NodeID> begin(blocks.size());
+        NodeID at = 0;
+        for (size_t i = 0; i < blocks.size(); i++) {
+                begin[i] = at;
+                at += size[blocks[i]];
+        }
+        std::vector<int> seeds(blocks.size());
+        for (auto &s : seeds) s = random_functions::nextInt(0, std::numeric_limits<int>::max() - 1);
+
+        // Each task writes its own range of m_reduced_label and works on its
+        // own configuration; G is only read.
+        auto task = [&](size_t i) {
+                random_functions::setSeed(seeds[i]);
+                PartitionConfig own = config;
+                NodeID first = begin[i];
+                recurse_dissection(own, G, blocks[i], first);
+        };
+        std::vector<std::thread> spawned;
+        for (size_t i = 0; i + 1 < blocks.size(); i++) {
+                if (thread_budget::take()) spawned.emplace_back(task, i);
+                else task(i);
+        }
+        task(blocks.size() - 1);
+        for (auto &t : spawned) {
+                t.join();
+                thread_budget::give();
+        }
 }
 
 void nested_dissection::recurse_dissection(PartitionConfig &config, graph_access &G, PartitionID block, NodeID &order_begin) {

@@ -4,8 +4,8 @@
 
 #include "area_bfs.h"
 
-std::vector<int> area_bfs::m_deepth;
-int area_bfs::round = 0;
+thread_local std::vector<int> area_bfs::m_deepth;
+thread_local int area_bfs::round = 0;
 
 area_bfs::area_bfs() {
                 

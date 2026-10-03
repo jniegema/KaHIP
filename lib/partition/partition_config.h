@@ -416,6 +416,22 @@ struct PartitionConfig
         //=======================================
         unsigned int dissection_rec_limit;
 
+        // Node ordering: subgraphs with fewer than metis_below vertices are
+        // ordered by METIS_NodeND (0: never), with metis_nseps separator
+        // candidates per level. The top of the dissection, where a 3D
+        // factorization's cost sits, keeps KaHIP's separators.
+        unsigned int metis_below;
+        int metis_nseps;
+        // ... and every subgraph at recursion depth metis_depth or deeper
+        // (-1: never). Depth suits graphs of any size; metis_below does not.
+        int metis_depth;
+
+        // Node ordering on this many threads (0: KaHIP's serial code as it
+        // was). Any positive count gives the same ordering: every initial
+        // separator try and every subtree of the dissection draws its own
+        // seed, so the count only decides how fast the ordering comes.
+        int threads;
+
         bool disable_reductions;
 
         std::vector<nested_dissection_reduction_type> reduction_order;

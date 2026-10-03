@@ -79,8 +79,8 @@ class area_bfs {
 			}
 		}
 
-		static std::vector<int> m_deepth;
-		static int round;
+		static thread_local std::vector<int> m_deepth;
+		static thread_local int round;
 
 };
 

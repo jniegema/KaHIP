@@ -46,6 +46,10 @@ private:
         // Compute a separator of the graph G
         void compute_separator(PartitionConfig &config, graph_access &G);
 
+        // The subgraphs of G's blocks and of its separator, dissected as seeded
+        // tasks on the thread budget (--threads)
+        void dissect_children(const PartitionConfig &config, graph_access &G);
+
         // Apply nested dissection to the subgraph of G induced by the partition with ID block
         // new labels start at order_begin, which is updated to the value past the new largest label
         void recurse_dissection(PartitionConfig &config, graph_access &G, PartitionID block, NodeID &order_begin);

@@ -162,7 +162,8 @@ class random_functions {
                 }
 
                 static double nextDouble(double lb, double rb) {
-                        double rnbr   = (double) rand() / (double) RAND_MAX; // rnd in 0,1
+                        double rnbr   = m_thread_streams ? (double) m_doubles() / (double) MersenneTwister::max()
+                                                         : (double) rand() / (double) RAND_MAX; // rnd in 0,1
                         double length = rb - lb;
                         rnbr         *= length;
                         rnbr         += lb;
@@ -172,13 +173,33 @@ class random_functions {
 
                 static void setSeed(int seed) {
                         m_seed = seed;
-                        srand(seed);
+                        // Under --threads rand() is METIS's alone: by default GKlib
+                        // draws from it, and an srand() here would reseed a METIS
+                        // call running on another thread.
+                        if (!m_thread_streams) srand(seed);
                         m_mt.seed(m_seed);
+                        // Not m_seed itself: m_doubles would repeat m_mt's stream.
+                        std::seed_seq doubles_seed{m_seed, 1};
+                        m_doubles.seed(doubles_seed);
+                }
+
+                // rand() keeps its state per process with glibc (per thread
+                // with MSVC), so the doubles of separator computations running
+                // on node ordering's threads (--threads) would interleave and
+                // the ordering would depend on scheduling. Once this is called,
+                // before any thread starts, nextDouble draws from each thread's
+                // own generator instead, seeded by setSeed like m_mt; its raw
+                // output is fixed by the standard, unlike rand()'s. Serial runs
+                // never call it and keep rand(), so they are unchanged.
+                static void use_thread_streams() {
+                        m_thread_streams = true;
                 }
 
         private:
-                static int m_seed;
-                static MersenneTwister m_mt;
+                static thread_local int m_seed;
+                static thread_local MersenneTwister m_mt;
+                static thread_local MersenneTwister m_doubles;
+                static bool m_thread_streams;
 };
 
 #endif /* end of include guard: RANDOM_FUNCTIONS_RMEPKWYT */

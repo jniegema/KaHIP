@@ -345,6 +345,10 @@ install(TARGETS edge_partitioning DESTINATION bin)
 add_executable(node_ordering app/node_ordering.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libnodeordering>)
 target_compile_definitions(node_ordering PRIVATE "-DMODE_NODESEP" "-DMODE_NODEORDERING")
 target_link_libraries(node_ordering ${OpenMP_CXX_LIBRARIES})
+if(LIB_METIS)
+  # metis_below hands the lower levels of the dissection to METIS_NodeND.
+  target_link_libraries(node_ordering ${LIB_METIS} ${LIB_GK})
+endif()
 install(TARGETS node_ordering DESTINATION bin)
 
 if(LIB_METIS)
