@@ -17,7 +17,10 @@ fm_ns_local_search::~fm_ns_local_search() {
 
 EdgeWeight fm_ns_local_search::perform_refinement(const PartitionConfig & config, graph_access & G, bool balance, PartitionID to) {
 
-        std::vector< maxNodeHeap > queues; queues.resize(2);
+        std::vector< maxNodeHeap > queues;
+        queues.reserve(2);
+        queues.emplace_back(G.number_of_nodes());
+        queues.emplace_back(G.number_of_nodes());
         std::vector< bool > moved_out_of_separator(G.number_of_nodes(), false);
         std::vector< change_set > rollback_info;
 
@@ -132,7 +135,10 @@ EdgeWeight fm_ns_local_search::perform_refinement(const PartitionConfig & config
                                                   std::vector< bool > & moved_out_of_separator,
                                                   PartialBoundary & separator, bool balance, PartitionID to) {
 
-        std::vector< maxNodeHeap > queues; queues.resize(2);
+        std::vector< maxNodeHeap > queues;
+        queues.reserve(2);
+        queues.emplace_back(G.number_of_nodes());
+        queues.emplace_back(G.number_of_nodes());
         std::vector< change_set > rollback_info;
 
         std::vector< NodeID > start_nodes;

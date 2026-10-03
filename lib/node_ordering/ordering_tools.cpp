@@ -14,10 +14,13 @@
 #include "node_ordering/ordering_tools.h"
 
 void print_ordering(std::ostream &out, const std::vector<NodeID> &labels) {
-        out << labels.size() << std::endl;
+        // '\n', not std::endl: a flush per line was as slow as the ordering
+        // of a 65k-vertex graph by METIS.
+        out << labels.size() << '\n';
         for (size_t i = 0; i < labels.size(); ++i) {
-                out << (i + 1) << "\t" << (labels[i] + 1) << std::endl;
+                out << (i + 1) << '\t' << (labels[i] + 1) << '\n';
         }
+        out.flush();
 }
 
 NodeWeight compute_reachable_set_size(graph_access &graph, NodeID node) {

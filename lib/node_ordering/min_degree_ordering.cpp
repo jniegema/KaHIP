@@ -14,6 +14,7 @@
 #include "tools/macros_assertions.h"
 
 MinDegree::MinDegree(graph_access * const graph, const std::vector<NodeID> &halo_nodes) : graph(graph),
+        degree_pq(graph->number_of_nodes()),
                                                    memberships(graph->number_of_nodes()),
                                                    node_links(graph->number_of_nodes()),
                                                    link_weights(graph->number_of_nodes()),
