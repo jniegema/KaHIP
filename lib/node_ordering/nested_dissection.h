@@ -46,6 +46,10 @@ private:
         // Compute a separator of the graph G
         void compute_separator(PartitionConfig &config, graph_access &G);
 
+        // The smallest separator of config.sep_portfolio seeded computations,
+        // run as tasks on the thread budget
+        void portfolio_separator(const PartitionConfig &config, graph_access &G);
+
         // The subgraphs of G's blocks and of its separator, dissected as seeded
         // tasks on the thread budget (--threads)
         void dissect_children(const PartitionConfig &config, graph_access &G);

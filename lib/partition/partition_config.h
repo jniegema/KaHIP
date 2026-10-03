@@ -425,12 +425,37 @@ struct PartitionConfig
         // ... and every subgraph at recursion depth metis_depth or deeper
         // (-1: never). Depth suits graphs of any size; metis_below does not.
         int metis_depth;
+        // Where METIS orders, a subgraph of at least metis_split vertices is
+        // bisected by one METIS separator and its parts become tasks (0:
+        // never). METIS_NodeND would recurse through the same bisections one
+        // at a time; as tasks they spread over the threads. The rule depends
+        // on sizes only, so the ordering stays the same for any thread count.
+        unsigned int metis_split;
 
         // Node ordering on this many threads (0: KaHIP's serial code as it
         // was). Any positive count gives the same ordering: every initial
         // separator try and every subtree of the dissection draws its own
         // seed, so the count only decides how fast the ordering comes.
         int threads;
+
+        // With threads, each separator of the dissection is the smallest of
+        // this many complete multilevel computations (coarsening, initial
+        // tries, refinement), each with its own seed. The initial tries only
+        // vary the coarsest level; on the drift-diffusion graphs the top
+        // separator's size still varied by a third from seed to seed, and
+        // the factorization's flops with it.
+        int sep_portfolio;
+        // ... and METIS's separator (metis_nseps candidates) as one more
+        // entry, so that no level of KaHIP's keeps a separator heavier than
+        // the one METIS would have used there.
+        bool sep_metis_candidate;
+
+        // The edge rating a node separator's coarsening uses: 0 separator_multx,
+        // 1 weight, 2 separator_max, 3 separator_log, or -1 for KaHIP's draw
+        // of one of them at random in every run. -2 gives a portfolio's run i
+        // the rating i mod 4: no rating was best on every graph family (the
+        // drift-diffusion graphs liked log and max, the FDFD ones weight).
+        int sep_rating;
 
         bool disable_reductions;
 

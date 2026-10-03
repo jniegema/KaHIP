@@ -252,7 +252,7 @@ void graph_partitioner::single_run( PartitionConfig & config, graph_access & G) 
                                 graph_hierarchy hierarchy;
 
                                 if( config.mode_node_separators ) {
-                                        int rnd = random_functions::nextInt(0,3);
+                                        int rnd = config.sep_rating >= 0 ? config.sep_rating : random_functions::nextInt(0,3);
                                         if( rnd == 0 ) {
                                                 config.edge_rating = SEPARATOR_MULTX;
                                         } else if ( rnd  == 1 ) {

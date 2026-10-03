@@ -484,6 +484,10 @@ inline void configuration::standard( PartitionConfig & partition_config ) {
         partition_config.dissection_rec_limit = 120;
         partition_config.metis_below = 0;
         partition_config.metis_nseps = 1;
+        partition_config.metis_split = 0;
+        partition_config.sep_portfolio = 1;
+        partition_config.sep_metis_candidate = false;
+        partition_config.sep_rating = -1;
         partition_config.disable_reductions = false;
 
         partition_config.ilp_min_gain = -1;

@@ -73,6 +73,44 @@ void metis_ordering(graph_access &G, int nseps, std::vector<NodeID> &labels) {
         std::exit(1);
 #endif
 }
+
+// One METIS bisection of G into blocks 0 and 1 and separator block 2: the
+// separator METIS_NodeND computes at the top of its own recursion (the same
+// MlevelNodeBisectionMultiple, nseps candidates), left on G for
+// dissect_children.
+void metis_separator(graph_access &G, int nseps) {
+#ifdef USEMETIS
+        idx_t n = G.number_of_nodes();
+        std::vector<idx_t> xadj(n + 1), adjncy(G.number_of_edges()), vwgt(n), part(n);
+        forall_nodes(G, node) {
+                xadj[node] = G.get_first_edge(node);
+                vwgt[node] = G.getNodeWeight(node);
+        } endfor
+        xadj[n] = G.number_of_edges();
+        forall_edges(G, e) {
+                adjncy[e] = G.getEdgeTarget(e);
+        } endfor
+        idx_t options[METIS_NOPTIONS];
+        METIS_SetDefaultOptions(options);
+        options[METIS_OPTION_NSEPS] = nseps;
+        options[METIS_OPTION_SEED]  = random_functions::nextInt(0, 1 << 30);
+        idx_t separator_weight = 0;
+        std::lock_guard<std::mutex> lock(metis_mutex);
+        if (METIS_ComputeVertexSeparator(&n, xadj.data(), adjncy.data(), vwgt.data(), options, &separator_weight, part.data()) != METIS_OK) {
+                std::cerr << "METIS_ComputeVertexSeparator failed on a subgraph of " << n << " vertices" << std::endl;
+                std::exit(1);
+        }
+        G.set_partition_count(3);
+        G.setSeparatorBlock(2);
+        forall_nodes(G, node) {
+                G.setPartitionIndex(node, part[node]);
+        } endfor
+#else
+        (void)G; (void)nseps;
+        std::cerr << "metis_split needs node_ordering built with METIS" << std::endl;
+        std::exit(1);
+#endif
+}
 }
 
 nested_dissection::nested_dissection(graph_access * const G) :
@@ -109,7 +147,13 @@ void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
                         MinDegree(active_graph).perform_ordering(m_reduced_label);
                 } else if (active_graph->number_of_nodes() < config.metis_below
                            || (config.metis_depth >= 0 && m_recursion_level >= config.metis_depth)) {
-                        metis_ordering(*active_graph, config.metis_nseps, m_reduced_label);
+                        if (config.metis_split > 0 && active_graph->number_of_nodes() >= config.metis_split) {
+                                if (config.threads > 0 && m_recursion_level == 0) thread_budget::set(config.threads);
+                                metis_separator(*active_graph, config.metis_nseps);
+                                dissect_children(config, *active_graph);
+                        } else {
+                                metis_ordering(*active_graph, config.metis_nseps, m_reduced_label);
+                        }
                 } else if (config.threads > 0) {
                         if (m_recursion_level == 0) thread_budget::set(config.threads);
                         compute_separator(config, *active_graph);
@@ -147,6 +191,11 @@ void nested_dissection::compute_separator(PartitionConfig &config, graph_access 
         balance_configuration bc;
         bc.configurate_balance(config, G);
 
+        if (config.threads > 0 && (config.sep_portfolio > 1 || config.sep_metis_candidate)) {
+                portfolio_separator(config, G);
+                return;
+        }
+
         // compute the separator
         area_bfs::m_deepth.resize(G.number_of_nodes(), 0);
         forall_nodes(G, node) {
@@ -155,6 +204,57 @@ void nested_dissection::compute_separator(PartitionConfig &config, graph_access 
 
         graph_partitioner partitioner;
         partitioner.perform_partitioning(config, G);
+}
+
+void nested_dissection::portfolio_separator(const PartitionConfig &config, graph_access &G) {
+        // KaHIP's runs, then METIS's separator as the last when asked for
+        const int runs = std::max(1, config.sep_portfolio) + (config.sep_metis_candidate ? 1 : 0);
+        std::vector<int> seeds(runs);
+        for (auto &s : seeds) s = random_functions::nextInt(0, std::numeric_limits<int>::max() - 1);
+        std::vector<NodeWeight> weights(runs);
+        std::vector<std::vector<PartitionID>> partitions(runs);
+        std::vector<PartitionID> counts(runs), separator_blocks(runs);
+        auto run = [&](int i) {
+                random_functions::setSeed(seeds[i]);
+                area_bfs::m_deepth.assign(G.number_of_nodes(), 0);
+                graph_access copy;
+                G.copy(copy);
+                copy.set_partition_count(G.get_partition_count());
+                if (config.sep_metis_candidate && i == runs - 1) {
+                        metis_separator(copy, config.metis_nseps);
+                } else {
+                        PartitionConfig own = config;
+                        if (config.sep_rating == -2) own.sep_rating = i % 4;
+                        graph_partitioner partitioner;
+                        partitioner.perform_partitioning(own, copy);
+                }
+                quality_metrics qm;
+                weights[i] = qm.separator_weight(copy);
+                counts[i] = copy.get_partition_count();
+                separator_blocks[i] = copy.getSeparatorBlock();
+                partitions[i].resize(copy.number_of_nodes());
+                forall_nodes(copy, node) {
+                        partitions[i][node] = copy.getPartitionIndex(node);
+                } endfor
+        };
+        std::vector<std::thread> spawned;
+        for (int i = 0; i + 1 < runs; i++) {
+                if (thread_budget::take()) spawned.emplace_back(run, i);
+                else run(i);
+        }
+        run(runs - 1);
+        for (auto &t : spawned) {
+                t.join();
+                thread_budget::give();
+        }
+
+        int best = 0;
+        for (int i = 1; i < runs; i++) if (weights[i] < weights[best]) best = i;
+        G.set_partition_count(counts[best]);
+        G.setSeparatorBlock(separator_blocks[best]);
+        forall_nodes(G, node) {
+                G.setPartitionIndex(node, partitions[best][node]);
+        } endfor
 }
 
 void nested_dissection::dissect_children(const PartitionConfig &config, graph_access &G) {

@@ -201,6 +201,10 @@ int parse_parameters(int argn, char **argv,
         struct arg_int *metis_below                          = arg_int0(NULL, "metis_below", NULL, "Order subgraphs with fewer vertices by METIS_NodeND (0: never; needs a build with METIS).");
         struct arg_int *metis_nseps                          = arg_int0(NULL, "metis_nseps", NULL, "METIS separator candidates per level below metis_below (Default: 1).");
         struct arg_int *metis_depth                          = arg_int0(NULL, "metis_depth", NULL, "Order subgraphs at this recursion depth or deeper by METIS_NodeND (Default: -1, never).");
+        struct arg_int *metis_split                          = arg_int0(NULL, "metis_split", NULL, "Where METIS orders, bisect subgraphs of at least this many vertices by a METIS separator and order the parts as tasks (Default: 0, never).");
+        struct arg_int *sep_portfolio                        = arg_int0(NULL, "sep_portfolio", NULL, "With threads, keep the smallest of this many seeded separator computations at each KaHIP level (Default: 1).");
+        struct arg_lit *sep_metis_candidate                  = arg_lit0(NULL, "sep_metis_candidate", "With threads, METIS's separator joins the portfolio of every KaHIP level.");
+        struct arg_int *sep_rating                           = arg_int0(NULL, "sep_rating", NULL, "Edge rating of the separator coarsening: 0 separator_multx, 1 weight, 2 separator_max, 3 separator_log, -2 in turn over a portfolio's runs (Default: -1, drawn at random in every run).");
         struct arg_int *threads                              = arg_int0(NULL, "threads", NULL, "Node ordering threads; any positive count gives the same ordering (Default: 0, the serial code).");
         struct arg_lit *disable_reductions                   = arg_lit0(NULL, "disable_reductions", "Turn graph reductions off");
         struct arg_str *reduction_order                      = arg_str0(NULL, "reduction_order", NULL, "Order in which to apply reductions. Reduction numbers 0-5. Specify as string, for example \"0 4\". Available reductions: 0 simplical node reduction, 1 indistinguishable_nodes, 2 twins, 3 path_compression, 4 degree_2_nodes, 5 triangle_contraction.");
@@ -220,7 +224,7 @@ int parse_parameters(int argn, char **argv,
         struct arg_int *ilp_timeout                          = arg_int0(NULL, "ilp_timeout", NULL, "ILP timeout in seconds (Default: 7200)");
 
         void* argtable_fordeletion[] = {
-                help, use_mmap_io, edge_rating_tiebreaking, match_islands, only_first_level, graph_weighted, enable_corner_refinement, disable_qgraph_refinement, use_fullmultigrid, use_vcycle, compute_vertex_separator, first_level_random_matching, rate_first_level_inner_outer, use_bucket_queues, use_wcycles, disable_refined_bubbling, enable_convergence, enable_omp, wcycle_no_new_initial_partitioning, filename, filename_output, user_seed, version, k, edge_rating, refinement_type, matching_type, mh_pool_size, mh_plain_repetitions, mh_penalty_for_unconnected, mh_disable_nc_combine, mh_disable_cross_combine, mh_disable_combine, mh_enable_quickstart, mh_disable_diversify_islands, mh_disable_diversify, mh_diversify_best, mh_enable_tournament_selection, mh_cross_combine_original_k, mh_optimize_communication_volume, disable_balance_singletons, connected_blocks, gpa_grow_internal, initial_partitioning_repetitions, minipreps, aggressive_random_levels, imbalance, initial_partition, initial_partition_optimize, bipartition_algorithm, permutation_quality, permutation_during_refinement, fm_search_limit, bipartition_post_fm_limit, bipartition_post_ml_limit, bipartition_tries, refinement_scheduling_algorithm, bank_account_factor, flow_region_factor, kway_adaptive_limits_alpha, stop_rule, num_vert_stop_factor, kway_search_stop_rule, bubbling_iterations, kway_rounds, kway_fm_limits, global_cycle_iterations, level_split, toposort_iterations, most_balanced_flows, input_partition, recursive_bipartitioning, suppress_output, disable_max_vertex_weight_constraint, local_multitry_fm_alpha, local_multitry_rounds, initial_partition_optimize_fm_limits, initial_partition_optimize_multitry_fm_alpha, initial_partition_optimize_multitry_rounds, preconfiguration, time_limit, unsuccessful_reps, local_partitioning_repetitions, amg_iterations, mh_flip_coin, mh_initial_population_fraction, mh_print_log, mh_sequential_mode, kaba_neg_cycle_algorithm, kabaE_internal_bal, kaba_internal_no_aug_steps_aug, kaba_packing_iterations, kaba_unsucc_iterations, kaba_flip_packings, kaba_lsearch_p, kaffpa_perfectly_balanced_refinement, kaba_disable_zero_weight_cycles, enforce_balance, mh_enable_tabu_search, mh_enable_kabapE, maxT, maxIter, balance_edges, cluster_upperbound, label_propagation_iterations, max_initial_ns_tries, max_flow_improv_steps, most_balanced_flows_node_sep, region_factor_node_separators, sep_flows_disabled, sep_fm_disabled, sep_loc_fm_disabled, sep_greedy_disabled, sep_full_boundary_ip, sep_faster_ns, sep_fm_unsucc_steps, sep_num_fm_reps, sep_loc_fm_unsucc_steps, sep_num_loc_fm_reps, sep_loc_fm_no_snodes, sep_num_vert_stop, sep_edge_rating_during_ip, enable_mapping, hierarchy_parameter_string, distance_parameter_string, online_distances, dissection_rec_limit, metis_below, metis_nseps, metis_depth, threads, disable_reductions, reduction_order, convergence_factor, max_simplicial_degree, ilp_mode, ilp_min_gain, ilp_bfs_depth, ilp_overlap_presets, ilp_limit_nonzeroes, ilp_overlap_runs, ilp_timeout,
+                help, use_mmap_io, edge_rating_tiebreaking, match_islands, only_first_level, graph_weighted, enable_corner_refinement, disable_qgraph_refinement, use_fullmultigrid, use_vcycle, compute_vertex_separator, first_level_random_matching, rate_first_level_inner_outer, use_bucket_queues, use_wcycles, disable_refined_bubbling, enable_convergence, enable_omp, wcycle_no_new_initial_partitioning, filename, filename_output, user_seed, version, k, edge_rating, refinement_type, matching_type, mh_pool_size, mh_plain_repetitions, mh_penalty_for_unconnected, mh_disable_nc_combine, mh_disable_cross_combine, mh_disable_combine, mh_enable_quickstart, mh_disable_diversify_islands, mh_disable_diversify, mh_diversify_best, mh_enable_tournament_selection, mh_cross_combine_original_k, mh_optimize_communication_volume, disable_balance_singletons, connected_blocks, gpa_grow_internal, initial_partitioning_repetitions, minipreps, aggressive_random_levels, imbalance, initial_partition, initial_partition_optimize, bipartition_algorithm, permutation_quality, permutation_during_refinement, fm_search_limit, bipartition_post_fm_limit, bipartition_post_ml_limit, bipartition_tries, refinement_scheduling_algorithm, bank_account_factor, flow_region_factor, kway_adaptive_limits_alpha, stop_rule, num_vert_stop_factor, kway_search_stop_rule, bubbling_iterations, kway_rounds, kway_fm_limits, global_cycle_iterations, level_split, toposort_iterations, most_balanced_flows, input_partition, recursive_bipartitioning, suppress_output, disable_max_vertex_weight_constraint, local_multitry_fm_alpha, local_multitry_rounds, initial_partition_optimize_fm_limits, initial_partition_optimize_multitry_fm_alpha, initial_partition_optimize_multitry_rounds, preconfiguration, time_limit, unsuccessful_reps, local_partitioning_repetitions, amg_iterations, mh_flip_coin, mh_initial_population_fraction, mh_print_log, mh_sequential_mode, kaba_neg_cycle_algorithm, kabaE_internal_bal, kaba_internal_no_aug_steps_aug, kaba_packing_iterations, kaba_unsucc_iterations, kaba_flip_packings, kaba_lsearch_p, kaffpa_perfectly_balanced_refinement, kaba_disable_zero_weight_cycles, enforce_balance, mh_enable_tabu_search, mh_enable_kabapE, maxT, maxIter, balance_edges, cluster_upperbound, label_propagation_iterations, max_initial_ns_tries, max_flow_improv_steps, most_balanced_flows_node_sep, region_factor_node_separators, sep_flows_disabled, sep_fm_disabled, sep_loc_fm_disabled, sep_greedy_disabled, sep_full_boundary_ip, sep_faster_ns, sep_fm_unsucc_steps, sep_num_fm_reps, sep_loc_fm_unsucc_steps, sep_num_loc_fm_reps, sep_loc_fm_no_snodes, sep_num_vert_stop, sep_edge_rating_during_ip, enable_mapping, hierarchy_parameter_string, distance_parameter_string, online_distances, dissection_rec_limit, metis_below, metis_nseps, metis_depth, metis_split, sep_portfolio, sep_metis_candidate, sep_rating, threads, disable_reductions, reduction_order, convergence_factor, max_simplicial_degree, ilp_mode, ilp_min_gain, ilp_bfs_depth, ilp_overlap_presets, ilp_limit_nonzeroes, ilp_overlap_runs, ilp_timeout,
                 end
         };
 
@@ -311,7 +315,7 @@ int parse_parameters(int argn, char **argv,
 
         #if defined MODE_NODEORDERING
                 // Separator, recursion and dissection settings of the node ordering.
-                dissection_rec_limit, metis_below, metis_nseps, metis_depth, threads, sep_faster_ns, sep_num_fm_reps, sep_fm_unsucc_steps,
+                dissection_rec_limit, metis_below, metis_nseps, metis_depth, metis_split, sep_portfolio, sep_metis_candidate, sep_rating, threads, sep_faster_ns, sep_num_fm_reps, sep_fm_unsucc_steps,
                 max_initial_ns_tries, max_flow_improv_steps, imbalance, sep_num_vert_stop,
                 //disable_reductions,
                 //filename_output, 
@@ -1208,6 +1212,22 @@ int parse_parameters(int argn, char **argv,
                 partition_config.metis_depth = metis_depth->ival[0];
         } else {
                 partition_config.metis_depth = -1;
+        }
+        if (metis_split->count > 0) {
+                partition_config.metis_split = metis_split->ival[0];
+        } else {
+                partition_config.metis_split = 0;
+        }
+        if (sep_portfolio->count > 0) {
+                partition_config.sep_portfolio = sep_portfolio->ival[0];
+        } else {
+                partition_config.sep_portfolio = 1;
+        }
+        partition_config.sep_metis_candidate = sep_metis_candidate->count > 0;
+        if (sep_rating->count > 0) {
+                partition_config.sep_rating = sep_rating->ival[0];
+        } else {
+                partition_config.sep_rating = -1;
         }
         if (threads->count > 0) {
                 partition_config.threads = threads->ival[0];
