@@ -276,6 +276,7 @@ if (USE_TCMALLOC)
   endif ()
 endif ()
 
+
 add_executable(global_multisection app/global_multisection.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libmapping>)
 target_compile_definitions(global_multisection PRIVATE "-DMODE_KAFFPA" "-DMODE_GLOBALMS")
 target_link_libraries(global_multisection ${OpenMP_CXX_LIBRARIES})
@@ -432,3 +433,8 @@ if (BUILDPYTHONMODULE)
   target_link_libraries(kahip_python_binding PUBLIC kahip_static)
   set_target_properties(kahip_python_binding PROPERTIES OUTPUT_NAME "kahip")
 endif ()
+
+include(CTest)
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

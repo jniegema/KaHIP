@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - master
+      - node-ordering-k-init
   workflow_dispatch:
 
 env:
@@ -15,7 +16,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       matrix:
         compiler:
@@ -37,3 +37,6 @@ jobs:
       if: matrix.argument == 'BUILDPYTHONMODULE'
       run: python3 ./deploy/callkahipfrompython.py
 
+
+    - name: Regression tests
+      run: ctest --test-dir build --output-on-failure

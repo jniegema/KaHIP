@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - master
+      - node-ordering-k-init
   workflow_dispatch:
 
 env:
@@ -15,7 +16,6 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 60
     steps:
     - uses: actions/checkout@v5
@@ -32,3 +32,6 @@ jobs:
       run: |
         cd build/Release
         .\interface_test.exe
+
+    - name: Regression tests
+      run: ctest --test-dir build -C Release --output-on-failure

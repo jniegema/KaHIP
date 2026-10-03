@@ -178,6 +178,17 @@ cd ..
 ```
 In this case, the binaries, libraries and headers are in the folder ./build as well as ./build/parallel/parallel_src/
 
+Run the regression tests after building:
+
+```console
+ctest --test-dir build --output-on-failure
+```
+
+For a multi-configuration generator, add `-C Release`. Tests are enabled by
+default (`-DBUILD_TESTING=OFF` disables them); the command-line regression checks
+use Python 3. They check repeatability, valid permutations, independently
+computed fill counts, separator validity, and the library interface.
+
 We also provide the option to link against TCMalloc. If you have it installed, run cmake with the additional option -DUSE_TCMALLOC=On. 
 
 By default node ordering programs are also compiled. If you have Metis installed, the build script also compiles a faster node ordering program that uses reductions before calling Metis ND. Note that Metis requires GKlib (https://github.com/KarypisLab/GKlib).
