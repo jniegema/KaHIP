@@ -37,7 +37,7 @@ int main(int argn, char **argv) {
                                         suppress_output, recursive);
 
         if (ret_code) {
-                return 0;
+                return ret_code == 1 ? 0 : 1;
         }
 
         // Backup stdout
@@ -75,7 +75,13 @@ int main(int argn, char **argv) {
 
         t.restart();
         nested_dissection dissection(&G);
-        dissection.perform_nested_dissection(partition_config);
+        try {
+                dissection.perform_nested_dissection(partition_config);
+        } catch (const std::exception &error) {
+                std::cout.rdbuf(backup);
+                std::cerr << error.what() << std::endl;
+                return 1;
+        }
 
         // Restore cout output stream
         std::cout.rdbuf(backup);

@@ -36,7 +36,7 @@ int main(int argn, char **argv) {
                                         suppress_output, recursive);
 
         if (ret_code) {
-                return 0;
+                return ret_code == 1 ? 0 : 1;
         }
 
         // Backup stdout

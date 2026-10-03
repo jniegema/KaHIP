@@ -19,6 +19,7 @@
 #endif
 #endif
 #include "configuration.h"
+#include "node_ordering/ordering_config.h"
 #include "version.h"
 
 int parse_parameters(int argn, char **argv, 
@@ -318,12 +319,12 @@ int parse_parameters(int argn, char **argv,
                 //label_iterations_refinement,    //
 
         #if defined MODE_NODEORDERING
+                #ifndef FASTORDERING
                 // Separator, recursion and dissection settings of the node ordering.
                 dissection_rec_limit, metis_below, metis_nseps, metis_depth, metis_split, metis_above_degree, sep_portfolio, sep_deeper_on_tie, sep_stop_cycle, no_fill_count, sep_metis_candidate, sep_rating, threads, sep_faster_ns, sep_num_fm_reps, sep_fm_unsucc_steps,
                 max_initial_ns_tries, max_flow_improv_steps, imbalance, sep_num_vert_stop,
                 //disable_reductions,
                 //filename_output, 
-                #ifndef FASTORDERING
                 //imbalance,  
                 preconfiguration, 
                 #endif
@@ -391,8 +392,33 @@ int parse_parameters(int argn, char **argv,
                 arg_print_errors(stderr, end, progname);
                 printf("Try '%s --help' for more information.\n",progname);
                 arg_freetable(argtable_fordeletion, sizeof(argtable_fordeletion) / sizeof(argtable_fordeletion[0]));
-                return 1; 
+                return 2;
         }
+
+#if defined(MODE_NODEORDERING) && !defined(FASTORDERING)
+        struct bounded_argument {
+                arg_int *argument;
+                int minimum;
+                const char *name;
+        };
+        const bounded_argument bounds[] = {
+                {dissection_rec_limit, 1, "dissection_rec_limit"},
+                {metis_below, 0, "metis_below"}, {metis_nseps, 1, "metis_nseps"},
+                {metis_depth, -1, "metis_depth"}, {metis_split, 0, "metis_split"},
+                {metis_above_degree, 0, "metis_above_degree"}, {threads, 0, "threads"},
+                {sep_portfolio, 1, "sep_portfolio"}, {sep_rating, -2, "sep_rating"},
+                {sep_num_vert_stop, 2, "sep_num_vert_stop"}, {max_initial_ns_tries, 1, "max_initial_ns_tries"},
+                {sep_num_fm_reps, 0, "sep_num_fm_reps"}, {sep_fm_unsucc_steps, 0, "sep_fm_unsucc_steps"},
+                {max_flow_improv_steps, 0, "max_flow_improv_steps"}
+        };
+        for (const bounded_argument &bound : bounds) {
+                if (bound.argument->count && bound.argument->ival[0] < bound.minimum) {
+                        std::cerr << "--" << bound.name << " must be at least " << bound.minimum << std::endl;
+                        arg_freetable(argtable_fordeletion, sizeof(argtable_fordeletion) / sizeof(argtable_fordeletion[0]));
+                        return 2;
+                }
+        }
+#endif
 
 #ifdef MODE_NODESEP
         // A node separator bisects. standard() and the *_separator presets
@@ -1362,6 +1388,15 @@ int parse_parameters(int argn, char **argv,
         }
 
 
+#if defined(MODE_NODEORDERING) && !defined(FASTORDERING)
+        try {
+                validate_node_ordering_config(partition_config);
+        } catch (const std::exception &error) {
+                std::cerr << error.what() << std::endl;
+                arg_freetable(argtable_fordeletion, sizeof(argtable_fordeletion) / sizeof(argtable_fordeletion[0]));
+                return 2;
+        }
+#endif
         arg_freetable(argtable_fordeletion, sizeof(argtable_fordeletion) / sizeof(argtable_fordeletion[0]));
         return 0;
 }

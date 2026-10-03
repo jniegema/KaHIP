@@ -416,67 +416,29 @@ struct PartitionConfig
         //=======================================
         unsigned int dissection_rec_limit;
 
-        // Node ordering: subgraphs with fewer than metis_below vertices are
-        // ordered by METIS_NodeND (0: never), with metis_nseps separator
-        // candidates per level. The top of the dissection, where a 3D
-        // factorization's cost sits, keeps KaHIP's separators.
+        // METIS handles subgraphs below this size, beyond this depth, or above
+        // this average degree. Zero size/degree and depth -1 disable the handoff.
         unsigned int metis_below;
         int metis_nseps;
-        // ... and every subgraph at recursion depth metis_depth or deeper
-        // (-1: never). Depth suits graphs of any size; metis_below does not.
         int metis_depth;
-        // Where METIS orders, a subgraph of at least metis_split vertices is
-        // bisected by one METIS separator and its parts become tasks (0:
-        // never). METIS_NodeND would recurse through the same bisections one
-        // at a time; as tasks they spread over the threads. The rule depends
-        // on sizes only, so the ordering stays the same for any thread count.
+        // Large METIS subgraphs are bisected into independently seeded tasks.
         unsigned int metis_split;
-        // ... and a subgraph whose average degree exceeds metis_above_degree
-        // (0: never). KaHIP's separator refinement costs grow with the square
-        // of the degree and METIS's do not: on SuiteSparse's nd24k (average
-        // degree 398) the portfolio took 140 s where PARDISO's analysis took
-        // 7 s, and its orderings were no cheaper than METIS's.
         unsigned int metis_above_degree;
 
-        // Node ordering on this many threads (0: KaHIP's serial code as it
-        // was). Any positive count gives the same ordering: every initial
-        // separator try and every subtree of the dissection draws its own
-        // seed, so the count only decides how fast the ordering comes.
+        // Zero retains the serial algorithm. Positive counts share a bounded
+        // worker pool; each task's seed is independent of its worker.
         int threads;
 
-        // With threads, each separator of the dissection is the smallest of
-        // this many complete multilevel computations (coarsening, initial
-        // tries, refinement), each with its own seed. The initial tries only
-        // vary the coarsest level; on the drift-diffusion graphs the top
-        // separator's size still varied by a third from seed to seed, and
-        // the factorization's flops with it.
+        // Keep the lightest candidate, breaking ties by the original run index.
         int sep_portfolio;
-        // ... and METIS's separator (metis_nseps candidates) as one more
-        // entry, so that no level of KaHIP's keeps a separator heavier than
-        // the one METIS would have used there.
         bool sep_metis_candidate;
-        // When every run of a portfolio returns a separator of the same
-        // weight, the separator is forced (a neck of the mesh, cut across
-        // wherever the runs happened to cut it) and what the factorization
-        // costs is decided one level down: there the parts are dissected by
-        // KaHIP's portfolio as well, one level beyond metis_depth.
+        // Equal candidate weights are a heuristic for investing one more KaHIP
+        // level below the cut; they do not prove the separator is unique.
         bool sep_deeper_on_tie;
-        // A portfolio's run i coarsens to sep_num_vert_stop times 1, 1/2 or 2
-        // (i mod 3). No coarsest size found the light separators of the
-        // FDFD waveguides every time: 2,000 vertices did on the 44-cell grid
-        // and missed on two of three seeds on the 56-cell grid, where 1,000
-        // and 4,000 found them on all three.
+        // Vary coarsest sizes by 1, 1/2, 2 across portfolio runs.
         bool sep_stop_cycle;
-
-        // node_ordering skips its fill count, which builds the filled graph
-        // and on a 255k-vertex graph needed more memory than the ordering.
         bool no_fill_count;
-
-        // The edge rating a node separator's coarsening uses: 0 separator_multx,
-        // 1 weight, 2 separator_max, 3 separator_log, or -1 for KaHIP's draw
-        // of one of them at random in every run. -2 gives a portfolio's run i
-        // the rating i mod 4: no rating was best on every graph family (the
-        // drift-diffusion graphs liked log and max, the FDFD ones weight).
+        // -1: random; -2: cycle 0..3 across runs; 0..3: a fixed separator rating.
         int sep_rating;
 
         bool disable_reductions;

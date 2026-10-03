@@ -65,6 +65,8 @@ endif()
 
 # Check dependencies
 find_package(OpenMP)
+find_package(Threads REQUIRED)
+link_libraries(Threads::Threads)
 if(OpenMP_CXX_FOUND)
   message(STATUS "OpenMP support detected")
   add_definitions(${OpenMP_CXX_FLAGS})
@@ -170,6 +172,7 @@ set(LIBKAFFPA_SOURCE_FILES
   lib/io/graph_io.cpp
   lib/tools/quality_metrics.cpp
   lib/tools/random_functions.cpp
+  lib/tools/task_pool.cpp
   lib/tools/graph_extractor.cpp
   lib/tools/misc.cpp
   lib/tools/partition_snapshooter.cpp

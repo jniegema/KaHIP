@@ -35,7 +35,7 @@ private:
         int m_recursion_level;
 
         // The portfolio's runs all returned separators of the same weight
-        bool m_forced_separator = false;
+        bool m_equal_separator_weights = false;
 
         // computed elimination order
         // node x is eliminated in step m_label[x]
@@ -50,11 +50,11 @@ private:
         void compute_separator(PartitionConfig &config, graph_access &G);
 
         // The smallest separator of config.sep_portfolio seeded computations,
-        // run as tasks on the thread budget
+        // run as tasks on the ordering's worker pool
         void portfolio_separator(const PartitionConfig &config, graph_access &G);
 
         // The subgraphs of G's blocks and of its separator, dissected as seeded
-        // tasks on the thread budget (--threads)
+        // tasks on the ordering's worker pool (--threads)
         void dissect_children(const PartitionConfig &config, graph_access &G);
 
         // Apply nested dissection to the subgraph of G induced by the partition with ID block

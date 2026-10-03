@@ -24,17 +24,25 @@ void graph_extractor::extract_block(graph_access & G,
 
         // build reverse mapping
         std::vector<NodeID> reverse_mapping;
+        reverse_mapping.reserve(G.number_of_nodes());
         NodeID nodes = 0;
+        EdgeID edges = 0;
         NodeID dummy_node = G.number_of_nodes() + 1;
         forall_nodes(G, node) {
                 if(G.getPartitionIndex(node) == block) {
                         reverse_mapping.push_back(nodes++);
+                        forall_out_edges(G, edge, node) {
+                                if (G.getPartitionIndex(G.getEdgeTarget(edge)) == block) ++edges;
+                        } endfor
                 } else {
                         reverse_mapping.push_back(dummy_node);
                 }
         } endfor
 
-        extracted_block.start_construction(nodes, G.number_of_edges());
+        // Recursive children coexist with the parent. Reserving the parent's
+        // edges in each child retains that capacity throughout its recursion.
+        extracted_block.start_construction(nodes, edges);
+        mapping.reserve(mapping.size() + nodes);
 
         forall_nodes(G, node) {
                 if(G.getPartitionIndex(node) == block) {

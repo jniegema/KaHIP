@@ -519,16 +519,25 @@ inline int graph_access::build_from_metis_weighted(int n, kahip_idx* xadj, kahip
 }
 
 inline void graph_access::copy(graph_access & G_bar) {
+        // Copies omit partition/refinement state. Reset it explicitly when a
+        // worker reuses the destination's allocations for another candidate.
+        G_bar.m_max_degree_computed = false;
+        G_bar.m_max_degree = 0;
+        G_bar.m_separator_block_ID = 2;
+        G_bar.m_second_partition_index.clear();
         G_bar.start_construction(number_of_nodes(), number_of_edges());
 
         basicGraph& ref = *graphref;
         forall_nodes(ref, node) {
                 NodeID shadow_node = G_bar.new_node();
                 G_bar.setNodeWeight(shadow_node, getNodeWeight(node));
+                G_bar.setPartitionIndex(shadow_node, 0);
+                G_bar.set_contraction_offset(shadow_node, 0);
                 forall_out_edges(ref, e, node) {
                         NodeID target                   = getEdgeTarget(e);
                         EdgeID shadow_edge              = G_bar.new_edge(shadow_node, target);
                         G_bar.setEdgeWeight(shadow_edge, getEdgeWeight(e));
+                        G_bar.setEdgeRating(shadow_edge, 0);
                 } endfor
         } endfor
 

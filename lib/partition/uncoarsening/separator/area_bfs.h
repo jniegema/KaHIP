@@ -82,6 +82,29 @@ class area_bfs {
 		static thread_local std::vector<int> m_deepth;
 		static thread_local int round;
 
+                // A waiting caller may run another separator task. Its generators
+                // and BFS marks must survive that task, even on a single worker.
+                class scoped_task {
+                public:
+                        scoped_task() : m_round(round) {
+                                m_depth.swap(m_deepth);
+                                round = 0;
+                                random_functions::use_thread_streams();
+                        }
+                        ~scoped_task() {
+                                m_depth.swap(m_deepth);
+                                round = m_round;
+                        }
+                        scoped_task(const scoped_task &) = delete;
+                        scoped_task &operator=(const scoped_task &) = delete;
+                        scoped_task(scoped_task &&) = delete;
+                        scoped_task &operator=(scoped_task &&) = delete;
+                private:
+                        random_functions::scoped_state m_random;
+                        std::vector<int> m_depth;
+                        int m_round;
+                };
+
 };
 
 

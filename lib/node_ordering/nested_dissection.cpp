@@ -10,6 +10,7 @@
 #include "balance_configuration.h"
 #include "node_ordering/min_degree_ordering.h"
 #include "node_ordering/nested_dissection.h"
+#include "node_ordering/ordering_config.h"
 #include "node_ordering/reductions.h"
 #include "partition/graph_partitioner.h"
 #include "partition/uncoarsening/separator/area_bfs.h"
@@ -18,28 +19,57 @@
 #include "tools/macros_assertions.h"
 #include "tools/quality_metrics.h"
 #include "tools/random_functions.h"
-#include "tools/thread_budget.h"
+#include "tools/task_pool.h"
 
-#include <cstdlib>
 #include <limits>
 #include <mutex>
-#include <thread>
+#include <string>
 
 #ifdef USEMETIS
 #include "metis.h"
 #endif
 
 namespace {
-// METIS draws from GKlib's generator, which is the C library's rand() unless
-// GKlib was built with GKRAND (then a Mersenne twister in static variables):
-// process-wide state either way with glibc, and every METIS call reseeds it on
-// entry. Two calls on two threads would interleave their draws and the
-// ordering would depend on scheduling, so METIS calls take turns: in sequence,
-// each call's draws are its own whichever thread runs it, and when. (Under
-// --threads, random_functions::setSeed leaves srand() to METIS for the same
-// reason.)
+// GKlib may keep its generator process-wide. Serialize METIS itself, while
+// graph conversion and result transfer remain outside the lock.
 #ifdef USEMETIS
 std::mutex metis_mutex;
+
+idx_t metis_index(uint64_t value, const char *field) {
+        if (value > static_cast<uint64_t>(std::numeric_limits<idx_t>::max())) {
+                throw std::runtime_error(std::string("METIS index width cannot represent ") + field);
+        }
+        return static_cast<idx_t>(value);
+}
+
+struct metis_graph {
+        idx_t nodes;
+        std::vector<idx_t> xadj, adjncy, weights;
+
+        explicit metis_graph(graph_access &G) : nodes(metis_index(G.number_of_nodes(), "the vertex count")) {
+                metis_index(G.number_of_edges(), "the edge count");
+                xadj.resize(static_cast<size_t>(nodes) + 1);
+                adjncy.resize(G.number_of_edges());
+                weights.resize(nodes);
+                uint64_t total_weight = 0;
+                forall_nodes(G, node) {
+                        xadj[node] = static_cast<idx_t>(G.get_first_edge(node));
+                        weights[node] = metis_index(G.getNodeWeight(node), "a vertex weight");
+                        total_weight += G.getNodeWeight(node);
+                } endfor
+                metis_index(total_weight, "the total vertex weight");
+                xadj[nodes] = static_cast<idx_t>(G.number_of_edges());
+                forall_edges(G, edge) {
+                        adjncy[edge] = static_cast<idx_t>(G.getEdgeTarget(edge));
+                } endfor
+        }
+};
+
+void metis_options(int nseps, idx_t *options) {
+        METIS_SetDefaultOptions(options);
+        options[METIS_OPTION_NSEPS] = nseps;
+        options[METIS_OPTION_SEED] = random_functions::nextInt(0, 1 << 30);
+}
 #endif
 
 // The subgraph's elimination order by METIS_NodeND, into labels (label[v]:
@@ -47,30 +77,21 @@ std::mutex metis_mutex;
 // fixes the whole ordering and different seeds give different ones.
 void metis_ordering(graph_access &G, int nseps, std::vector<NodeID> &labels) {
 #ifdef USEMETIS
-        idx_t n = G.number_of_nodes();
-        std::vector<idx_t> xadj(n + 1), adjncy(G.number_of_edges()), vwgt(n), perm(n), iperm(n);
-        forall_nodes(G, node) {
-                xadj[node] = G.get_first_edge(node);
-                vwgt[node] = G.getNodeWeight(node);
-        } endfor
-        xadj[n] = G.number_of_edges();
-        forall_edges(G, e) {
-                adjncy[e] = G.getEdgeTarget(e);
-        } endfor
+        metis_graph graph(G);
+        std::vector<idx_t> perm(graph.nodes), iperm(graph.nodes);
         idx_t options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
-        options[METIS_OPTION_NSEPS] = nseps;
-        options[METIS_OPTION_SEED]  = random_functions::nextInt(0, 1 << 30);
-        std::lock_guard<std::mutex> lock(metis_mutex);
-        if (METIS_NodeND(&n, xadj.data(), adjncy.data(), vwgt.data(), options, perm.data(), iperm.data()) != METIS_OK) {
-                std::cerr << "METIS_NodeND failed on a subgraph of " << n << " vertices" << std::endl;
-                std::exit(1);
+        metis_options(nseps, options);
+        {
+                std::lock_guard<std::mutex> lock(metis_mutex);
+                if (METIS_NodeND(&graph.nodes, graph.xadj.data(), graph.adjncy.data(), graph.weights.data(),
+                                 options, perm.data(), iperm.data()) != METIS_OK) {
+                        throw std::runtime_error("METIS_NodeND failed on " + std::to_string(graph.nodes) + " vertices");
+                }
         }
         labels.assign(iperm.begin(), iperm.end());
 #else
         (void)G; (void)nseps; (void)labels;
-        std::cerr << "metis_below needs node_ordering built with METIS" << std::endl;
-        std::exit(1);
+        throw std::runtime_error("METIS ordering requires a build with METIS");
 #endif
 }
 
@@ -80,25 +101,17 @@ void metis_ordering(graph_access &G, int nseps, std::vector<NodeID> &labels) {
 // dissect_children.
 void metis_separator(graph_access &G, int nseps) {
 #ifdef USEMETIS
-        idx_t n = G.number_of_nodes();
-        std::vector<idx_t> xadj(n + 1), adjncy(G.number_of_edges()), vwgt(n), part(n);
-        forall_nodes(G, node) {
-                xadj[node] = G.get_first_edge(node);
-                vwgt[node] = G.getNodeWeight(node);
-        } endfor
-        xadj[n] = G.number_of_edges();
-        forall_edges(G, e) {
-                adjncy[e] = G.getEdgeTarget(e);
-        } endfor
+        metis_graph graph(G);
+        std::vector<idx_t> part(graph.nodes);
         idx_t options[METIS_NOPTIONS];
-        METIS_SetDefaultOptions(options);
-        options[METIS_OPTION_NSEPS] = nseps;
-        options[METIS_OPTION_SEED]  = random_functions::nextInt(0, 1 << 30);
+        metis_options(nseps, options);
         idx_t separator_weight = 0;
-        std::lock_guard<std::mutex> lock(metis_mutex);
-        if (METIS_ComputeVertexSeparator(&n, xadj.data(), adjncy.data(), vwgt.data(), options, &separator_weight, part.data()) != METIS_OK) {
-                std::cerr << "METIS_ComputeVertexSeparator failed on a subgraph of " << n << " vertices" << std::endl;
-                std::exit(1);
+        {
+                std::lock_guard<std::mutex> lock(metis_mutex);
+                if (METIS_ComputeVertexSeparator(&graph.nodes, graph.xadj.data(), graph.adjncy.data(), graph.weights.data(),
+                                                 options, &separator_weight, part.data()) != METIS_OK) {
+                        throw std::runtime_error("METIS_ComputeVertexSeparator failed on " + std::to_string(graph.nodes) + " vertices");
+                }
         }
         G.set_partition_count(3);
         G.setSeparatorBlock(2);
@@ -107,8 +120,7 @@ void metis_separator(graph_access &G, int nseps) {
         } endfor
 #else
         (void)G; (void)nseps;
-        std::cerr << "metis_split needs node_ordering built with METIS" << std::endl;
-        std::exit(1);
+        throw std::runtime_error("METIS separators require a build with METIS");
 #endif
 }
 }
@@ -121,9 +133,9 @@ nested_dissection::nested_dissection(graph_access * const G, int recursion_level
 
 
 void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
-        if (m_recursion_level == 0 && config.threads > 0) {
-                random_functions::use_thread_streams();
-        }
+        if (m_recursion_level == 0) validate_node_ordering_config(config);
+        random_functions::scoped_thread_streams streams(config.threads > 0);
+        task_pool pool(m_recursion_level == 0 ? config.threads : 0);
         if (original_graph->number_of_nodes() == 0) {
                 return;
         }
@@ -147,17 +159,15 @@ void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
                         MinDegree(active_graph).perform_ordering(m_reduced_label);
                 } else if (active_graph->number_of_nodes() < config.metis_below
                            || (config.metis_depth >= 0 && m_recursion_level >= config.metis_depth)
-                           || (config.metis_above_degree > 0
-                               && active_graph->number_of_edges() > (EdgeID)config.metis_above_degree * active_graph->number_of_nodes())) {
+                           || exceeds_ordering_degree(active_graph->number_of_edges(), active_graph->number_of_nodes(),
+                                                      config.metis_above_degree)) {
                         if (config.metis_split > 0 && active_graph->number_of_nodes() >= config.metis_split) {
-                                if (config.threads > 0 && m_recursion_level == 0) thread_budget::set(config.threads);
                                 metis_separator(*active_graph, config.metis_nseps);
                                 dissect_children(config, *active_graph);
                         } else {
                                 metis_ordering(*active_graph, config.metis_nseps, m_reduced_label);
                         }
                 } else if (config.threads > 0) {
-                        if (m_recursion_level == 0) thread_budget::set(config.threads);
                         compute_separator(config, *active_graph);
                         dissect_children(config, *active_graph);
                 } else {
@@ -229,7 +239,8 @@ void nested_dissection::portfolio_separator(const PartitionConfig &config, graph
                         if (config.sep_rating == -2) own.sep_rating = i % 4;
                         if (config.sep_stop_cycle) {
                                 const int scale[3] = {2, 1, 4}; // halves: 1, 1/2, 2
-                                own.sep_num_vert_stop = std::max(2, config.sep_num_vert_stop * scale[i % 3] / 2);
+                                own.sep_num_vert_stop = static_cast<int>(std::max<int64_t>(2,
+                                        static_cast<int64_t>(config.sep_num_vert_stop) * scale[i % 3] / 2));
                         }
                         graph_partitioner partitioner;
                         partitioner.perform_partitioning(own, copy);
@@ -243,20 +254,19 @@ void nested_dissection::portfolio_separator(const PartitionConfig &config, graph
                         partitions[i][node] = copy.getPartitionIndex(node);
                 } endfor
         };
-        std::vector<std::thread> spawned;
+        task_pool::group tasks;
         for (int i = 0; i + 1 < runs; i++) {
-                if (thread_budget::take()) spawned.emplace_back(run, i);
-                else run(i);
+                tasks.run([&, i] {
+                        area_bfs::scoped_task state;
+                        run(i);
+                });
         }
         run(runs - 1);
-        for (auto &t : spawned) {
-                t.join();
-                thread_budget::give();
-        }
+        tasks.wait();
 
         int best = 0;
         for (int i = 1; i < runs; i++) if (weights[i] < weights[best]) best = i;
-        m_forced_separator = runs > 1 && std::all_of(weights.begin(), weights.end(),
+        m_equal_separator_weights = runs > 1 && std::all_of(weights.begin(), weights.end(),
                                                      [&](NodeWeight w) { return w == weights[best]; });
         G.set_partition_count(counts[best]);
         G.setSeparatorBlock(separator_blocks[best]);
@@ -292,23 +302,27 @@ void nested_dissection::dissect_children(const PartitionConfig &config, graph_ac
         auto task = [&](size_t i) {
                 random_functions::setSeed(seeds[i]);
                 PartitionConfig own = config;
-                if (config.sep_deeper_on_tie && m_forced_separator && config.metis_depth >= 0
+                if (config.sep_deeper_on_tie && m_equal_separator_weights && config.metis_depth >= 0
                     && blocks[i] != G.getSeparatorBlock()) {
-                        own.metis_depth = config.metis_depth + 1;
+                        own.metis_depth = config.metis_depth < std::numeric_limits<int>::max()
+                                          ? config.metis_depth + 1 : config.metis_depth;
                 }
                 NodeID first = begin[i];
                 recurse_dissection(own, G, blocks[i], first);
         };
-        std::vector<std::thread> spawned;
+        task_pool::group tasks;
         for (size_t i = 0; i + 1 < blocks.size(); i++) {
-                if (thread_budget::take()) spawned.emplace_back(task, i);
-                else task(i);
+                if (config.threads > 0) {
+                        tasks.run([&, i] {
+                                area_bfs::scoped_task state;
+                                task(i);
+                        });
+                } else {
+                        task(i);
+                }
         }
         task(blocks.size() - 1);
-        for (auto &t : spawned) {
-                t.join();
-                thread_budget::give();
-        }
+        tasks.wait();
 }
 
 void nested_dissection::recurse_dissection(PartitionConfig &config, graph_access &G, PartitionID block, NodeID &order_begin) {
