@@ -306,7 +306,9 @@ int parse_parameters(int argn, char **argv,
                 //label_iterations_refinement,    //
 
         #if defined MODE_NODEORDERING
-                //dissection_rec_limit,
+                // Separator, recursion and dissection settings of the node ordering.
+                dissection_rec_limit, sep_faster_ns, sep_num_fm_reps, sep_fm_unsucc_steps,
+                max_initial_ns_tries, max_flow_improv_steps, imbalance, sep_num_vert_stop,
                 //disable_reductions,
                 //filename_output, 
                 #ifndef FASTORDERING
