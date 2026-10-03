@@ -168,6 +168,7 @@ public:
                                          NodeID sink, 
                                          bool compute_source_set, 
                                          std::vector< NodeID > & source_set) {
+                G.finish_construction();
                 m_G                  = & G;
                 m_work               = 0;
                 m_num_relabels       = 0;

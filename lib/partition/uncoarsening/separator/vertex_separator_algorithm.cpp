@@ -107,8 +107,9 @@ void vertex_separator_algorithm::build_flow_problem(const PartitionConfig & conf
 
         NodeID n = 2*(lhs_nodes.size() + rhs_nodes.size() + separator_nodes.size()) + 2; // source and sink
 
-        // find forward and backward mapping
-        std::unordered_map< NodeID, NodeID > backward_mapping;
+        // find forward and backward mapping (a vector over G's nodes: the
+        // flow problems are built once per try and per refinement step)
+        std::vector< NodeID > backward_mapping(G.number_of_nodes());
         forward_mapping.clear();
         forward_mapping.resize(n-2);
 
