@@ -485,6 +485,7 @@ inline void configuration::standard( PartitionConfig & partition_config ) {
         partition_config.metis_below = 0;
         partition_config.metis_nseps = 1;
         partition_config.metis_split = 0;
+        partition_config.metis_above_degree = 0;
         partition_config.sep_portfolio = 1;
         partition_config.sep_metis_candidate = false;
         partition_config.sep_rating = -1;

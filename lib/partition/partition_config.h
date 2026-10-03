@@ -431,6 +431,12 @@ struct PartitionConfig
         // at a time; as tasks they spread over the threads. The rule depends
         // on sizes only, so the ordering stays the same for any thread count.
         unsigned int metis_split;
+        // ... and a subgraph whose average degree exceeds metis_above_degree
+        // (0: never). KaHIP's separator refinement costs grow with the square
+        // of the degree and METIS's do not: on SuiteSparse's nd24k (average
+        // degree 398) the portfolio took 140 s where PARDISO's analysis took
+        // 7 s, and its orderings were no cheaper than METIS's.
+        unsigned int metis_above_degree;
 
         // Node ordering on this many threads (0: KaHIP's serial code as it
         // was). Any positive count gives the same ordering: every initial

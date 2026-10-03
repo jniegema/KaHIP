@@ -146,7 +146,9 @@ void nested_dissection::perform_nested_dissection(PartitionConfig &config) {
                         // Stop nested dissection and use the min degree algorithm instead
                         MinDegree(active_graph).perform_ordering(m_reduced_label);
                 } else if (active_graph->number_of_nodes() < config.metis_below
-                           || (config.metis_depth >= 0 && m_recursion_level >= config.metis_depth)) {
+                           || (config.metis_depth >= 0 && m_recursion_level >= config.metis_depth)
+                           || (config.metis_above_degree > 0
+                               && active_graph->number_of_edges() > (EdgeID)config.metis_above_degree * active_graph->number_of_nodes())) {
                         if (config.metis_split > 0 && active_graph->number_of_nodes() >= config.metis_split) {
                                 if (config.threads > 0 && m_recursion_level == 0) thread_budget::set(config.threads);
                                 metis_separator(*active_graph, config.metis_nseps);
