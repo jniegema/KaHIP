@@ -468,6 +468,10 @@ struct PartitionConfig
         // and 4,000 found them on all three.
         bool sep_stop_cycle;
 
+        // node_ordering skips its fill count, which builds the filled graph
+        // and on a 255k-vertex graph needed more memory than the ordering.
+        bool no_fill_count;
+
         // The edge rating a node separator's coarsening uses: 0 separator_multx,
         // 1 weight, 2 separator_max, 3 separator_log, or -1 for KaHIP's draw
         // of one of them at random in every run. -2 gives a portfolio's run i

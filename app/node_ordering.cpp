@@ -82,7 +82,9 @@ int main(int argn, char **argv) {
 
         std::cout << "time spent to compute node ordering " << t.elapsed() << std::endl;
 
-        std::cout << "Number of fill-edges: " << compute_fill(G, dissection.ordering()) << std::endl;
+        if (!partition_config.no_fill_count) {
+                std::cout << "Number of fill-edges: " << compute_fill(G, dissection.ordering()) << std::endl;
+        }
 
         std::string filename;
         if (!partition_config.filename_output.compare("")) {
