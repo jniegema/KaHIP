@@ -65,6 +65,8 @@ endif()
 
 # Check dependencies
 find_package(OpenMP)
+find_package(Threads REQUIRED)
+link_libraries(Threads::Threads)
 if(OpenMP_CXX_FOUND)
   message(STATUS "OpenMP support detected")
   add_definitions(${OpenMP_CXX_FLAGS})
@@ -170,6 +172,7 @@ set(LIBKAFFPA_SOURCE_FILES
   lib/io/graph_io.cpp
   lib/tools/quality_metrics.cpp
   lib/tools/random_functions.cpp
+  lib/tools/task_pool.cpp
   lib/tools/graph_extractor.cpp
   lib/tools/misc.cpp
   lib/tools/partition_snapshooter.cpp
@@ -346,6 +349,10 @@ install(TARGETS edge_partitioning DESTINATION bin)
 add_executable(node_ordering app/node_ordering.cpp $<TARGET_OBJECTS:libkaffpa> $<TARGET_OBJECTS:libnodeordering>)
 target_compile_definitions(node_ordering PRIVATE "-DMODE_NODESEP" "-DMODE_NODEORDERING")
 target_link_libraries(node_ordering ${OpenMP_CXX_LIBRARIES})
+if(LIB_METIS)
+  # metis_below hands the lower levels of the dissection to METIS_NodeND.
+  target_link_libraries(node_ordering ${LIB_METIS} ${LIB_GK})
+endif()
 install(TARGETS node_ordering DESTINATION bin)
 
 if(LIB_METIS)

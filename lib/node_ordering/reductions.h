@@ -5,6 +5,7 @@
 #ifndef H_ISOLATED_CLIQUE
 #define H_ISOLATED_CLIQUE
 
+#include <mutex>
 #include <array>
 #include <iostream>
 #include <iomanip>
@@ -29,6 +30,8 @@ private:
 
         int deg2_separator_count;
 
+        std::mutex m_mutex;
+
         inline reduction_stat_counter() {
                 percent_sums.push_back(percent_array{});
                 application_counts.push_back(count_array{});
@@ -47,6 +50,8 @@ public:
                                     int num_original_nodes,
                                     int num_reduced_nodes,
                                     int recursion_level = 0) {
+                // Subtrees of the dissection count from several threads (--threads).
+                std::lock_guard<std::mutex> lock(m_mutex);
                 while (recursion_level >= (int)percent_sums.size()) {
                         percent_sums.push_back(percent_array{});
                         application_counts.push_back(count_array{});

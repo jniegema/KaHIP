@@ -2,13 +2,17 @@
 // Author: Christian Schulz <christian.schulz.phone@gmail.com>
 // 
 
-#include <fstream>
+#include <algorithm>
+#include <atomic>
+#include <limits>
 #include "initial_node_separator.h"
 #include "graph_partitioner.h"
 #include "tools/quality_metrics.h"
 #include "tools/random_functions.h"
 #include "partition/uncoarsening/separator/vertex_separator_algorithm.h"
 #include "partition/uncoarsening/refinement/node_separators/fm_ns_local_search.h"
+#include "partition/uncoarsening/separator/area_bfs.h"
+#include "tools/task_pool.h"
 
 initial_node_separator::initial_node_separator() {
                 
@@ -20,15 +24,7 @@ initial_node_separator::~initial_node_separator() {
 
 NodeWeight initial_node_separator::single_run( const PartitionConfig & config, graph_access & G) {
 
-        std::streambuf* backup = std::cout.rdbuf();
-        std::ofstream ofs;
-#ifdef _WIN32
-        ofs.open("NUL");
-#else
-        ofs.open("/dev/null");
-#endif
-        std::cout.rdbuf(ofs.rdbuf()); 
-
+        // Per-try redirection of the process-wide stream would race between workers.
         graph_partitioner partitioner;
         PartitionConfig partition_config         = config;
         partition_config.mode_node_separators    = false;
@@ -40,9 +36,6 @@ NodeWeight initial_node_separator::single_run( const PartitionConfig & config, g
 
         complete_boundary boundary(&G);
         boundary.build();
-
-        ofs.close();
-        std::cout.rdbuf(backup);
 
         vertex_separator_algorithm vsa; std::vector<NodeID> separator;
         //create a very simple separator from that partition
@@ -63,6 +56,10 @@ NodeWeight initial_node_separator::single_run( const PartitionConfig & config, g
 
 void initial_node_separator::compute_node_separator( const PartitionConfig & config, graph_access & G) {
         if(config.graph_allready_partitioned) return;
+        if(config.threads > 0) {
+                seeded_tries(config, G);
+                return;
+        }
 
         std::vector< NodeID > best_separator(G.number_of_nodes(),0);
         NodeWeight best_separator_size = std::numeric_limits< NodeWeight >::max();
@@ -92,4 +89,56 @@ void initial_node_separator::compute_node_separator( const PartitionConfig & con
                 G.setPartitionIndex(node, best_separator[node]);
         } endfor
         
+}
+
+void initial_node_separator::seeded_tries( const PartitionConfig & config, graph_access & G) {
+        const int tries = std::max(1, config.max_initial_ns_tries);
+        std::vector<int> seeds(tries);
+        for (auto &s : seeds) s = random_functions::nextInt(0, std::numeric_limits<int>::max() - 1);
+        struct candidate {
+                NodeWeight weight = std::numeric_limits<NodeWeight>::max();
+                int index = std::numeric_limits<int>::max();
+                PartitionID count = 0, separator_block = 2;
+                std::vector<PartitionID> partition;
+        };
+        const int workers = std::min(tries, task_pool::concurrency());
+        std::vector<candidate> best(workers);
+        std::atomic<size_t> next(0);
+        auto work = [&](int worker_index) {
+                area_bfs::scoped_task state;
+                graph_access copy;
+                candidate &winner = best[worker_index];
+                for (size_t i = next++; i < static_cast<size_t>(tries); i = next++) {
+                        random_functions::setSeed(seeds[i]);
+                        area_bfs::m_deepth.assign(G.number_of_nodes(), 0);
+                        G.copy(copy);
+                        copy.set_partition_count(G.get_partition_count());
+                        copy.setSeparatorBlock(G.getSeparatorBlock());
+                        initial_node_separator worker;
+                        const NodeWeight weight = worker.single_run(config, copy);
+                        if (weight < winner.weight || (weight == winner.weight && i < static_cast<size_t>(winner.index))) {
+                                winner.weight = weight;
+                                winner.index = static_cast<int>(i);
+                                winner.count = copy.get_partition_count();
+                                winner.separator_block = copy.getSeparatorBlock();
+                                winner.partition.resize(copy.number_of_nodes());
+                                forall_nodes(copy, node) {
+                                        winner.partition[node] = copy.getPartitionIndex(node);
+                                } endfor
+                        }
+                }
+        };
+        task_pool::group tasks;
+        for (int w = 1; w < workers; w++) tasks.run([&, w] { work(w); });
+        work(0);
+        tasks.wait();
+
+        const candidate &winner = *std::min_element(best.begin(), best.end(), [](const candidate &a, const candidate &b) {
+                return a.weight < b.weight || (a.weight == b.weight && a.index < b.index);
+        });
+        G.set_partition_count(winner.count);
+        G.setSeparatorBlock(winner.separator_block);
+        forall_nodes(G, node) {
+                G.setPartitionIndex(node, winner.partition[node]);
+        } endfor
 }

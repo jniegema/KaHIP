@@ -34,6 +34,9 @@ private:
         // How often 'recurse_dissection' was called to get to this level
         int m_recursion_level;
 
+        // The portfolio's runs all returned separators of the same weight
+        bool m_equal_separator_weights = false;
+
         // computed elimination order
         // node x is eliminated in step m_label[x]
         std::vector<NodeID> m_label;
@@ -45,6 +48,14 @@ private:
 
         // Compute a separator of the graph G
         void compute_separator(PartitionConfig &config, graph_access &G);
+
+        // The smallest separator of config.sep_portfolio seeded computations,
+        // run as tasks on the ordering's worker pool
+        void portfolio_separator(const PartitionConfig &config, graph_access &G);
+
+        // The subgraphs of G's blocks and of its separator, dissected as seeded
+        // tasks on the ordering's worker pool (--threads)
+        void dissect_children(const PartitionConfig &config, graph_access &G);
 
         // Apply nested dissection to the subgraph of G induced by the partition with ID block
         // new labels start at order_begin, which is updated to the value past the new largest label

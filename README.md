@@ -316,6 +316,42 @@ By applying both new and existing data reduction rules exhaustively before neste
 ./deploy/fast_node_ordering examples/rgg_n_2_15_s0.graph
 ```
 
+`node_ordering` can retain KaHIP's top separators and use METIS below them:
+
+```console
+./deploy/node_ordering GRAPH --preconfiguration=fast --threads=6 --seed=0 \
+    --metis_depth=1 --metis_nseps=3 --metis_split=30000 \
+    --sep_portfolio=6 --sep_rating=-2 --max_initial_ns_tries=16 \
+    --sep_num_vert_stop=2000 --sep_num_fm_reps=5 --metis_above_degree=150
+```
+
+These options belong to `node_ordering`; `fast_node_ordering` runs its existing
+reductions-and-METIS algorithm and rejects them. With no new options, the serial
+algorithm is unchanged. METIS options require a build that found METIS and GKlib.
+Invalid ranges and incompatible options are rejected before reading the graph.
+The existing `--sep_faster_ns` early-stop option requires `--threads=0`;
+threaded ordering evaluates all initial tries to keep selection reproducible.
+
+| Option | Meaning |
+| --- | --- |
+| `--threads=T` | A reusable pool of T workers, including the calling thread. Positive counts produce the same ordering for a fixed seed; 0 selects the original serial algorithm. |
+| `--metis_depth=D`, `--metis_below=N` | Hand subgraphs at depth D or beyond, or smaller than N vertices, to METIS. Defaults: -1 and 0, both disabled. |
+| `--metis_above_degree=D` | Hand subgraphs with average degree above D to METIS; 0 disables this rule. |
+| `--metis_nseps=N` | Positive number of METIS separator candidates; default 1. |
+| `--metis_split=N` | Split METIS subgraphs of at least N vertices into seeded tasks. Requires a METIS handoff rule; 0 disables splitting. |
+| `--sep_portfolio=P` | Keep the lightest of P seeded KaHIP separator computations; ties favor the earlier run. P > 1 requires positive `--threads`. |
+| `--sep_metis_candidate` | Include a METIS separator in the portfolio; requires positive `--threads`. |
+| `--sep_rating=R` | -1 selects ratings randomly; 0..3 select multx, weight, max, or log; -2 cycles those ratings across a portfolio. |
+| `--sep_stop_cycle` | Cycle portfolio coarsest sizes by 1, 1/2, 2. Requires a portfolio. |
+| `--sep_deeper_on_tie` | If candidate weights tie, try one more KaHIP level below the cut. Requires a portfolio and a nonnegative `metis_depth`; equal weights are a heuristic, not proof that a separator is forced. |
+| `--no_fill_count` | Skip the fill diagnostic, which explicitly builds the filled graph and can use more memory than ordering. |
+
+METIS calls remain serialized because GKlib may share random state across
+threads. KaHIP tasks own their random state and BFS scratch, including when a
+waiting caller helps with nested tasks. Initial tries reuse graph allocations
+and keep one winning partition per worker. Child graphs reserve their own edge
+counts rather than the parent's edge count.
+
 ### Edge Partitioning 
 Edge-centric distributed computations have appeared as a recent technique to improve the shortcomings of think-
 like-a-vertex algorithms on large scale-free networks. In order to increase parallelism on this model, edge partitioning -- partitioning edges into roughly equally sized blocks -- has emerged as an alternative to traditional (node-based) graph partitioning. We include a fast parallel and sequential split-and-connect graph construction algorithm

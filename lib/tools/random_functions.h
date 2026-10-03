@@ -162,7 +162,8 @@ class random_functions {
                 }
 
                 static double nextDouble(double lb, double rb) {
-                        double rnbr   = (double) rand() / (double) RAND_MAX; // rnd in 0,1
+                        double rnbr   = m_thread_streams ? (double) m_doubles() / (double) MersenneTwister::max()
+                                                         : (double) rand() / (double) RAND_MAX; // rnd in 0,1
                         double length = rb - lb;
                         rnbr         *= length;
                         rnbr         += lb;
@@ -172,13 +173,60 @@ class random_functions {
 
                 static void setSeed(int seed) {
                         m_seed = seed;
-                        srand(seed);
+                        // Under --threads rand() is METIS's alone: by default GKlib
+                        // draws from it, and an srand() here would reseed a METIS
+                        // call running on another thread.
+                        if (!m_thread_streams) srand(seed);
                         m_mt.seed(m_seed);
+                        // Not m_seed itself: m_doubles would repeat m_mt's stream.
+                        std::seed_seq doubles_seed{m_seed, 1};
+                        m_doubles.seed(doubles_seed);
                 }
 
+                // Threaded tasks must not share rand() with one another or METIS.
+                static void use_thread_streams() {
+                        m_thread_streams = true;
+                }
+
+                class scoped_state {
+                public:
+                        scoped_state() : m_saved_seed(m_seed), m_saved_mt(m_mt), m_saved_doubles(m_doubles),
+                                         m_saved_thread_streams(m_thread_streams) {}
+                        ~scoped_state() {
+                                m_seed = m_saved_seed;
+                                m_mt = m_saved_mt;
+                                m_doubles = m_saved_doubles;
+                                m_thread_streams = m_saved_thread_streams;
+                        }
+                        scoped_state(const scoped_state &) = delete;
+                        scoped_state &operator=(const scoped_state &) = delete;
+                        scoped_state(scoped_state &&) = delete;
+                        scoped_state &operator=(scoped_state &&) = delete;
+                private:
+                        int m_saved_seed;
+                        MersenneTwister m_saved_mt, m_saved_doubles;
+                        bool m_saved_thread_streams;
+                };
+
+                class scoped_thread_streams {
+                public:
+                        explicit scoped_thread_streams(bool enable) : m_previous(m_thread_streams) {
+                                if (enable) m_thread_streams = true;
+                        }
+                        ~scoped_thread_streams() { m_thread_streams = m_previous; }
+                        scoped_thread_streams(const scoped_thread_streams &) = delete;
+                        scoped_thread_streams &operator=(const scoped_thread_streams &) = delete;
+                        scoped_thread_streams(scoped_thread_streams &&) = delete;
+                        scoped_thread_streams &operator=(scoped_thread_streams &&) = delete;
+                private:
+                        bool m_previous;
+                };
+
         private:
-                static int m_seed;
-                static MersenneTwister m_mt;
+                static thread_local int m_seed;
+                static thread_local MersenneTwister m_mt;
+                static thread_local MersenneTwister m_doubles;
+                static thread_local bool m_thread_streams;
 };
 
 #endif /* end of include guard: RANDOM_FUNCTIONS_RMEPKWYT */

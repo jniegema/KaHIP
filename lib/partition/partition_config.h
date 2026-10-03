@@ -416,6 +416,31 @@ struct PartitionConfig
         //=======================================
         unsigned int dissection_rec_limit;
 
+        // METIS handles subgraphs below this size, beyond this depth, or above
+        // this average degree. Zero size/degree and depth -1 disable the handoff.
+        unsigned int metis_below;
+        int metis_nseps;
+        int metis_depth;
+        // Large METIS subgraphs are bisected into independently seeded tasks.
+        unsigned int metis_split;
+        unsigned int metis_above_degree;
+
+        // Zero retains the serial algorithm. Positive counts share a bounded
+        // worker pool; each task's seed is independent of its worker.
+        int threads;
+
+        // Keep the lightest candidate, breaking ties by the original run index.
+        int sep_portfolio;
+        bool sep_metis_candidate;
+        // Equal candidate weights are a heuristic for investing one more KaHIP
+        // level below the cut; they do not prove the separator is unique.
+        bool sep_deeper_on_tie;
+        // Vary coarsest sizes by 1, 1/2, 2 across portfolio runs.
+        bool sep_stop_cycle;
+        bool no_fill_count;
+        // -1: random; -2: cycle 0..3 across runs; 0..3: a fixed separator rating.
+        int sep_rating;
+
         bool disable_reductions;
 
         std::vector<nested_dissection_reduction_type> reduction_order;

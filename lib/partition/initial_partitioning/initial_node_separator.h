@@ -16,6 +16,11 @@ public:
         // method computes an initial node separator
         void compute_node_separator( const PartitionConfig & config, graph_access & G);
         NodeWeight single_run( const PartitionConfig & config, graph_access & G);
+
+private:
+        // The tries on copies of G, each with a seed drawn from the caller's
+        // generator, on worker threads from the thread budget (--threads).
+        void seeded_tries( const PartitionConfig & config, graph_access & G);
 };
 
 
