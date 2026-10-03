@@ -489,6 +489,7 @@ inline void configuration::standard( PartitionConfig & partition_config ) {
         partition_config.sep_portfolio = 1;
         partition_config.sep_metis_candidate = false;
         partition_config.sep_deeper_on_tie = false;
+        partition_config.sep_stop_cycle = false;
         partition_config.sep_rating = -1;
         partition_config.disable_reductions = false;
 

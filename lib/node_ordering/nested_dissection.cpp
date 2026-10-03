@@ -227,6 +227,10 @@ void nested_dissection::portfolio_separator(const PartitionConfig &config, graph
                 } else {
                         PartitionConfig own = config;
                         if (config.sep_rating == -2) own.sep_rating = i % 4;
+                        if (config.sep_stop_cycle) {
+                                const int scale[3] = {2, 1, 4}; // halves: 1, 1/2, 2
+                                own.sep_num_vert_stop = std::max(2, config.sep_num_vert_stop * scale[i % 3] / 2);
+                        }
                         graph_partitioner partitioner;
                         partitioner.perform_partitioning(own, copy);
                 }

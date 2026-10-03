@@ -461,6 +461,12 @@ struct PartitionConfig
         // costs is decided one level down: there the parts are dissected by
         // KaHIP's portfolio as well, one level beyond metis_depth.
         bool sep_deeper_on_tie;
+        // A portfolio's run i coarsens to sep_num_vert_stop times 1, 1/2 or 2
+        // (i mod 3). No coarsest size found the light separators of the
+        // FDFD waveguides every time: 2,000 vertices did on the 44-cell grid
+        // and missed on two of three seeds on the 56-cell grid, where 1,000
+        // and 4,000 found them on all three.
+        bool sep_stop_cycle;
 
         // The edge rating a node separator's coarsening uses: 0 separator_multx,
         // 1 weight, 2 separator_max, 3 separator_log, or -1 for KaHIP's draw
