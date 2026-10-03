@@ -380,6 +380,12 @@ int parse_parameters(int argn, char **argv,
                 return 1; 
         }
 
+#ifdef MODE_NODESEP
+        // A node separator bisects. standard() and the *_separator presets
+        // below choose limits by k, and node_separator and node_ordering take
+        // no k, so without this they read PartitionConfig's uninitialized k.
+        partition_config.k = 2;
+#endif
         if (k->count > 0) {
                 partition_config.k = k->ival[0];
         }
