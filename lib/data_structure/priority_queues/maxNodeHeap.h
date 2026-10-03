@@ -9,6 +9,7 @@
 #define MAX_NODE_HEAP_39CK1B8I
 
 #include <limits>
+#include <stdexcept>
 #include <vector>
 #include <unordered_map>
 #ifndef _WIN32
@@ -67,6 +68,9 @@ class maxNodeHeap : public priority_queue_interface {
                 typedef QElement<Data> PQElement;
 
                 maxNodeHeap() {};
+                // Local searches use a few global vertex IDs, so their index must
+                // stay sparse. Whole-graph searches can request a bounded dense index.
+                explicit maxNodeHeap(NodeID nodes) : m_dense(true), m_dense_index(nodes, -1) {};
                 ~maxNodeHeap() override = default;
 
                 NodeID size() override;
@@ -80,7 +84,7 @@ class maxNodeHeap : public priority_queue_interface {
                 // be changed by nothing but its own changeKey calls.
                 bool owns_key(NodeID node) {
                         if( !has(node) ) return false;
-                        const int i = m_element_index[node];
+                        const int i = m_dense ? m_dense_index[node] : m_element_index.at(node);
                         return i != 0 && m_elements[i].get_data().node == node;
                 }
                 void insert(NodeID id, Gain gain) override;
@@ -97,19 +101,34 @@ class maxNodeHeap : public priority_queue_interface {
 
         private:
                 std::vector< PQElement >               m_elements;      // elements that contain the data
-                // Index of each node in m_elements, -1 when absent. A dense array instead of
-                // std::unordered_map; index_of() reproduces the map's operator[], which inserts
-                // an absent node with index 0, so the heap behaves exactly as before.
-                std::vector<int>                   m_element_index;
+                bool m_dense = false;
+                std::vector<int> m_dense_index;
+                std::unordered_map<NodeID, int> m_element_index;
                 int& slot(NodeID node) {
-                        if( node >= m_element_index.size() ) {
-                                m_element_index.resize(std::max<std::size_t>(node + 1, 2 * m_element_index.size()), -1);
+                        if (!m_dense) return m_element_index[node];
+                        if (node >= m_dense_index.size()) {
+                                throw std::out_of_range("maxNodeHeap: vertex exceeds the dense index bound");
                         }
-                        return m_element_index[node];
+                        return m_dense_index[node];
                 }
-                int& index_of(NodeID node) { int& s = slot(node); if( s == -1 ) s = 0; return s; }
-                bool has(NodeID node) const { return node < m_element_index.size() && m_element_index[node] != -1; }
-                void forget(NodeID node) { if( node < m_element_index.size() ) m_element_index[node] = -1; }
+                // Preserve the legacy operator[] behavior for callers updating an
+                // absent node: it aliases element zero rather than inserting a heap item.
+                int& index_of(NodeID node) {
+                        int &index = slot(node);
+                        if (index == -1) index = 0;
+                        return index;
+                }
+                bool has(NodeID node) const {
+                        return m_dense ? node < m_dense_index.size() && m_dense_index[node] != -1
+                                       : m_element_index.find(node) != m_element_index.end();
+                }
+                void forget(NodeID node) {
+                        if (m_dense) {
+                                if (node < m_dense_index.size()) m_dense_index[node] = -1;
+                        } else {
+                                m_element_index.erase(node);
+                        }
+                }
                 std::vector< std::pair<Key, int> >     m_heap;          // key and index in elements (pointer)
 
                 void siftUp( int pos );

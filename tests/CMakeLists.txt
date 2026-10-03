@@ -6,6 +6,10 @@ add_executable(test_ordering_configuration configuration.cpp ../extern/argtable3
 target_compile_definitions(test_ordering_configuration PRIVATE MODE_NODESEP MODE_NODEORDERING)
 add_test(NAME ordering.configuration COMMAND test_ordering_configuration)
 
+add_executable(test_separator_structures separator_structures.cpp)
+target_link_libraries(test_separator_structures PRIVATE kahip_static)
+add_test(NAME separator.structures COMMAND test_separator_structures)
+
 add_executable(test_library_ordering library_ordering.cpp)
 target_link_libraries(test_library_ordering PRIVATE kahip_static)
 add_test(NAME ordering.library COMMAND test_library_ordering)

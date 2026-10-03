@@ -37,9 +37,8 @@ struct rEdge {
 // The edges of all nodes sit in one array, each node's in the order new_edge
 // added them, so every edge has the index (and its reverse the reverse
 // index) it had in the per-node vectors this replaces: push-relabel visits
-// them in the same order and finds the same cut. The per-node vectors cost
-// one allocation per node and per growth; building the flow problems was 12%
-// of a node ordering's CPU time on an FDFD graph, most of it in the tries.
+// them in the same order and finds the same cut, without allocating and
+// growing a separate vector for every node.
 // finish_construction() lays the edges out; push_relabel calls it, so
 // builders that never did keep working.
 class flow_graph {

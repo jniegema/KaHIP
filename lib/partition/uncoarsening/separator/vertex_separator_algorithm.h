@@ -74,6 +74,10 @@ class vertex_separator_algorithm {
                                               complete_boundary & boundary);
 
         private:
+                // Only vertices in the current flow region are read. Retaining this
+                // mapping avoids clearing every graph vertex for every flow trial.
+                std::vector<NodeID> m_backward_mapping;
+
                 void convert_residualGraph( graph_access & G, std::vector< NodeID > & forward_mapping, 
                                             NodeID & source, NodeID & sink, 
                                             flow_graph & rG, graph_access & residualGraph);
