@@ -455,6 +455,12 @@ struct PartitionConfig
         // entry, so that no level of KaHIP's keeps a separator heavier than
         // the one METIS would have used there.
         bool sep_metis_candidate;
+        // When every run of a portfolio returns a separator of the same
+        // weight, the separator is forced (a neck of the mesh, cut across
+        // wherever the runs happened to cut it) and what the factorization
+        // costs is decided one level down: there the parts are dissected by
+        // KaHIP's portfolio as well, one level beyond metis_depth.
+        bool sep_deeper_on_tie;
 
         // The edge rating a node separator's coarsening uses: 0 separator_multx,
         // 1 weight, 2 separator_max, 3 separator_log, or -1 for KaHIP's draw

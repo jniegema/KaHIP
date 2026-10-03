@@ -34,6 +34,9 @@ private:
         // How often 'recurse_dissection' was called to get to this level
         int m_recursion_level;
 
+        // The portfolio's runs all returned separators of the same weight
+        bool m_forced_separator = false;
+
         // computed elimination order
         // node x is eliminated in step m_label[x]
         std::vector<NodeID> m_label;

@@ -252,6 +252,8 @@ void nested_dissection::portfolio_separator(const PartitionConfig &config, graph
 
         int best = 0;
         for (int i = 1; i < runs; i++) if (weights[i] < weights[best]) best = i;
+        m_forced_separator = runs > 1 && std::all_of(weights.begin(), weights.end(),
+                                                     [&](NodeWeight w) { return w == weights[best]; });
         G.set_partition_count(counts[best]);
         G.setSeparatorBlock(separator_blocks[best]);
         forall_nodes(G, node) {
@@ -286,6 +288,10 @@ void nested_dissection::dissect_children(const PartitionConfig &config, graph_ac
         auto task = [&](size_t i) {
                 random_functions::setSeed(seeds[i]);
                 PartitionConfig own = config;
+                if (config.sep_deeper_on_tie && m_forced_separator && config.metis_depth >= 0
+                    && blocks[i] != G.getSeparatorBlock()) {
+                        own.metis_depth = config.metis_depth + 1;
+                }
                 NodeID first = begin[i];
                 recurse_dissection(own, G, blocks[i], first);
         };
