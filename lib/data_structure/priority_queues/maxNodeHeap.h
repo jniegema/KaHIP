@@ -73,6 +73,16 @@ class maxNodeHeap : public priority_queue_interface {
                 bool empty() override;
 
                 bool contains(NodeID node) override;
+
+                // Whether node is in the heap under its own element, and that
+                // element is not element 0. changeKey on an absent node acts on
+                // element 0 (index_of), so only such a node's key is certain to
+                // be changed by nothing but its own changeKey calls.
+                bool owns_key(NodeID node) {
+                        if( !has(node) ) return false;
+                        const int i = m_element_index[node];
+                        return i != 0 && m_elements[i].get_data().node == node;
+                }
                 void insert(NodeID id, Gain gain) override;
 
                 NodeID deleteMax() override;

@@ -45,6 +45,26 @@ private:
 
         std::vector< NodeID > moved_nodes;
         std::vector< NodeID > m_to_be_added, m_to_be_updated;
+
+        // A node next to several of a move's new separator nodes is listed
+        // once for each. Its gain is the same every time (the partition does
+        // not change while the gains are updated) and changeKey to an equal
+        // key does nothing, so a repeat is skipped, unless the node's key
+        // could have been moved in between (owns_key).
+        std::vector< unsigned > m_updated_in;
+        unsigned m_move = 0;
+        bool repeated_update(NodeID node, std::vector< maxNodeHeap > & queues) {
+                if( m_updated_in[node] == m_move && queues[0].owns_key(node) && queues[1].owns_key(node) ) return true;
+                m_updated_in[node] = m_move;
+                return false;
+        }
+        void next_move(graph_access & G) {
+                if( m_updated_in.size() < G.number_of_nodes() ) m_updated_in.resize(G.number_of_nodes(), 0);
+                if( ++m_move == 0 ) {
+                        std::fill(m_updated_in.begin(), m_updated_in.end(), 0);
+                        m_move = 1;
+                }
+        }
 };
 
 
@@ -123,7 +143,9 @@ void fm_ns_local_search::move_node( graph_access & G, NodeID & node, PartitionID
                 queues[1].insert(node, toRHS);
         }
 
+        next_move(G);
         for( NodeID node : to_be_updated) {
+                if( repeated_update(node, queues) ) continue;
                 compute_gain( G, node, toLHS, toRHS);
                 queues[0].changeKey(node, toLHS);
                 queues[1].changeKey(node, toRHS);
@@ -194,7 +216,9 @@ void fm_ns_local_search::move_node( graph_access & G, NodeID & node, PartitionID
                 queues[1].insert(node, toRHS);
         }
 
+        next_move(G);
         for( NodeID node : to_be_updated) {
+                if( repeated_update(node, queues) ) continue;
                 compute_gain( G, node, toLHS, toRHS);
                 queues[0].changeKey(node, toLHS);
                 queues[1].changeKey(node, toRHS);
